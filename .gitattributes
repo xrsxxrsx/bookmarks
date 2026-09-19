@@ -1,0 +1,25 @@
+# Normalise line endings in the repository.
+#
+# Git's `core.autocrlf` default differs per machine and per install, so without this the
+# same file is stored differently depending on who committed it. The visible symptom on
+# Windows is a "LF will be replaced by CRLF" warning on every `git add`, and the subtler
+# one is that a one-character edit can show up in a diff as the whole file changing.
+#
+# `text=auto` lets Git detect text files and store them with LF, converting to the local
+# convention on checkout. `eol=lf` pins the working tree to LF as well, so the bytes match
+# what the repository holds and the warning stops.
+* text=auto eol=lf
+
+# PNG and ICO are binary — never touch their bytes.
+*.png binary
+*.ico binary
+
+# Keep these exactly as generated; a line-ending rewrite would make lockfile diffs noise.
+Cargo.lock -text
+package-lock.json -text
+
+# Batch and PowerShell files are the one place Windows genuinely needs CRLF, because
+# cmd.exe and some PowerShell hosts mis-handle LF in scripts.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

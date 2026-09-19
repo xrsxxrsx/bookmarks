@@ -21,13 +21,15 @@ path, so changing it makes an existing configuration invisible.
 
 The library itself — `bookmarks.db` plus `library/` — is deliberately kept out of
 `%APPDATA%`, so a nearly full C: drive cannot stop it working. Set it in the settings
-panel; the default when nothing has been chosen is `D:\dsh\books`, and `BOOKMARKS_LIBRARY`
-overrides both, which keeps tests and scratch runs off the real library. The status bar
-shows the resolved path, and the toolbar opens the folder for backing it up.
+panel; the default when nothing has been chosen is `%USERPROFILE%\Documents\bookmarks`,
+and `BOOKMARKS_LIBRARY` overrides both, which keeps tests and scratch runs off the real
+library. The status bar shows the resolved path, and the toolbar opens the folder for
+backing it up.
 
-Because `D:\dsh\books` is this machine's layout rather than a sensible default for anyone
-else, changing `DEFAULT_LIBRARY` in `crates/app/src/lib.rs` is the first thing to do on a
-new checkout.
+The default is derived from the user's profile rather than hard-coded, so a fresh clone
+never creates a library on a drive that only exists on the original author's machine.
+`Documents` usually sits on C:, which is exactly the case the setting exists to avoid — so
+if the library grows large, point it somewhere roomier.
 
 ## Layout
 
@@ -56,7 +58,7 @@ suite fast. Use `--workspace` to include the app crate.
 
 ## What is verified
 
-160 Rust tests, plus a type-check of the interface (`npm run typecheck`). The frontend has
+161 Rust tests, plus a type-check of the interface (`npm run typecheck`). The frontend has
 no unit tests of its own; see *Remaining work* below for why that matters.
 
 Part of the suite is an acceptance test for the parser and the import pipeline. It runs
@@ -70,10 +72,10 @@ checked against what AO3 actually emits:
 | `Zong_Lu_Jian_Dan_Di_Sha.html` | works/91520771, Chinese, 22,210 words | unrelated |
 
 Those downloads are **not committed** — they are other people's stories, and a public
-repository would republish them. On this machine they sit in `D:\dsh\books\_original-downloads`;
-copy them into the repository root to run those 21 tests. Without them each test skips and
-the suite stays green. Skips are printed, so they are visible under
-`cargo test -- --nocapture`:
+repository would republish them. They are read from the repository root, so copy them there
+to run those 21 tests; on the machine this was developed on they are kept in
+`D:\dsh\books\_original-downloads`. Without them each test skips and the suite stays green.
+Skips are printed, so they are visible under `cargo test -- --nocapture`:
 
 ```
 SKIP real_samples: sample file(s) not present: Er_San.html
@@ -154,7 +156,7 @@ the application data directory:
 ```
 %APPDATA%\com.bookmarks.app\
   settings.json          ← a few hundred bytes, and nothing else
-D:\dsh\books\            ← the default library, changeable in Settings
+%USERPROFILE%\Documents\bookmarks\   ← the default library, changeable in Settings
   bookmarks.db
   library/
     000001/work.html

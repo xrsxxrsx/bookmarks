@@ -34,10 +34,21 @@ pub const IDENTIFIER: &str = "com.bookmarks.app";
 
 /// Where a library is created when the user has not chosen a place.
 ///
-/// A short path outside the application data directory, deliberately: the library is the large
-/// part — the database plus every imported file — so `%APPDATA%` keeps only the few hundred
-/// bytes of settings, and a nearly full C: drive does not stop the library from working.
-pub const DEFAULT_LIBRARY: &str = r"D:\dsh\books";
+/// Resolved from the user's profile rather than hard-coded, so a fresh clone does not create a
+/// library on whatever drive the original author happened to use. `Documents` is the right place
+/// semantically — these are the user's own files — and it is somewhere they can find and back up.
+///
+/// Outside the application data directory deliberately: the library is the large part, so
+/// `%APPDATA%` keeps only the few hundred bytes of settings. The trade-off is that `Documents`
+/// usually sits on C:, while the whole point of a chosen location is that a nearly full system
+/// drive cannot stop the library working — hence the setting.
+fn default_library_dir() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    home.join("Documents").join("bookmarks")
+}
 
 /// The user's data directory (`%APPDATA%` on Windows), where settings live.
 pub fn data_dir() -> PathBuf {
@@ -53,7 +64,7 @@ pub fn data_dir() -> PathBuf {
 pub fn default_library_path() -> PathBuf {
     std::env::var_os("BOOKMARKS_LIBRARY")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_LIBRARY))
+        .unwrap_or_else(default_library_dir)
 }
 
 /// Opens the library at an explicit path, creating it if needed.
@@ -1342,10 +1353,34 @@ mod tests {
             def.display()
         );
         assert!(
-            def.to_string_lossy().contains("books"),
+            def.to_string_lossy().contains("bookmarks"),
             "unexpected default: {}",
             def.display()
         );
+    }
+
+    /// A hard-coded `D:\...` path would create a library on a drive that may not exist on
+    /// someone else's machine, so the default must be derived from the user's profile.
+    #[test]
+    fn the_default_library_is_derived_from_the_user_profile_not_hard_coded() {
+        let def = default_library_path();
+
+        // Only meaningful when the override is not in play; the variable is set in some CI runs
+        // to keep tests off a real library, and then this test has nothing to say.
+        if std::env::var_os("BOOKMARKS_LIBRARY").is_some() {
+            return;
+        }
+
+        let home = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(PathBuf::from);
+        if let Some(home) = home {
+            assert!(
+                def.starts_with(&home),
+                "the default should sit under the user's profile, got {}",
+                def.display()
+            );
+        }
     }
 
     #[test]
