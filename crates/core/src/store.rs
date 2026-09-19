@@ -658,6 +658,11 @@ impl Library {
                  date_source        = CASE WHEN ?6  IS NULL THEN date_source        ELSE 'manual' END,
                  completed_at       = CASE WHEN ?10 IS NULL THEN completed_at       ELSE ?11 END,
                  completed_prec     = CASE WHEN ?10 IS NULL THEN completed_prec     ELSE ?12 END,
+                 -- Wrapped in `Some` for the same reason as `date_is_approx` above: the
+                 -- column is NOT NULL, so clearing the date must still bind a number
+                 -- rather than NULL. Unwrapping it here crashed on a cleared completion
+                 -- date, which is a normal thing to do to a work that turns out to be
+                 -- finished after all.
                  completed_is_approx= CASE WHEN ?10 IS NULL THEN completed_is_approx ELSE ?13 END,
                  completed_source   = CASE WHEN ?10 IS NULL THEN completed_source   ELSE 'manual' END,
                  status             = COALESCE(?14, status),
@@ -678,11 +683,16 @@ impl Library {
                 edit.published.as_ref().map(|_| 1),
                 published.as_ref().map(|(iso, _, _)| iso.clone()),
                 published.as_ref().map(|(_, prec, _)| prec.clone()),
-                published.as_ref().map(|(_, _, approx)| *approx as i64),
+                // `Some` rather than the bare value. An empty input parses to no date at
+                // all, which is how a cleared field arrives, so without this the flag binds
+                // NULL and hits the NOT NULL constraint while the date itself clears fine.
+                Some(published.as_ref().map(|(_, _, approx)| *approx as i64).unwrap_or(0)),
                 edit.completed.as_ref().map(|_| 1),
                 completed.as_ref().map(|(iso, _, _)| iso.clone()),
                 completed.as_ref().map(|(_, prec, _)| prec.clone()),
-                completed.as_ref().map(|(_, _, approx)| *approx as i64),
+                // `Some` rather than the bare value: an empty input parses to no date at
+                // all, and the column is NOT NULL, so this must stay a number.
+                Some(completed.as_ref().map(|(_, _, approx)| *approx as i64).unwrap_or(0)),
                 edit.status.as_deref(),
                 // A negative count is not meaningful; treat it as "no change".
                 edit.word_count.filter(|n| *n >= 0),
@@ -1368,6 +1378,87 @@ mod tests {
             })
             .unwrap();
         assert_eq!(author.as_deref(), Some("My Correction"));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Clearing a date the user previously set is an ordinary action — "this turned out to
+    /// be finished after all" — and it used to fail with a NOT NULL violation, because an
+    /// empty input parses to `None` while the column is still flagged as being edited.
+    #[test]
+    fn clearing_a_previously_set_completion_date_is_allowed() {
+        let root = temp_root("cleardate");
+        let lib = Library::open_in_memory(&root).unwrap();
+        let id = lib.insert_record_only_work("Unfinished", None).unwrap();
+
+        // Set it.
+        lib.apply_work_edit(
+            id,
+            &WorkEdit {
+                completed: Some(DateEdit {
+                    input: "2021-05-04".into(),
+                    approx: false,
+                }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let read = |lib: &Library| -> (Option<String>, Option<String>, i64) {
+            lib.conn()
+                .query_row(
+                    "SELECT completed_at, completed_prec, completed_is_approx FROM works WHERE id = ?1",
+                    params![id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap()
+        };
+        let (at, prec, approx) = read(&lib);
+        assert_eq!(at.as_deref(), Some("2021-05-04"));
+        assert_eq!(prec.as_deref(), Some("day"));
+        assert_eq!(approx, 0);
+
+        // Now clear it: the empty input the form sends when the field is emptied.
+        lib.apply_work_edit(
+            id,
+            &WorkEdit {
+                completed: Some(DateEdit {
+                    input: String::new(),
+                    approx: false,
+                }),
+                ..Default::default()
+            },
+        )
+        .expect("clearing a date must not violate the NOT NULL constraint");
+
+        let (at, prec, approx) = read(&lib);
+        assert_eq!(at, None, "the date itself is cleared");
+        assert_eq!(prec, None);
+        assert_eq!(approx, 0, "the flag stays a number, not NULL");
+
+        // The same for the publication date, which is the other half of the same form.
+        lib.apply_work_edit(
+            id,
+            &WorkEdit {
+                published: Some(DateEdit {
+                    input: "2019".into(),
+                    approx: true,
+                }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        lib.apply_work_edit(
+            id,
+            &WorkEdit {
+                published: Some(DateEdit {
+                    input: String::new(),
+                    approx: false,
+                }),
+                ..Default::default()
+            },
+        )
+        .expect("clearing the publication date must work too");
 
         let _ = std::fs::remove_dir_all(&root);
     }
