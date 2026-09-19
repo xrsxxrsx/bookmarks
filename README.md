@@ -1,5 +1,7 @@
 # bookmarks
 
+**English** | [中文](README.zh-CN.md)
+
 A local, offline replacement for an AO3 bookmarks page: keeps a personal library of
 fanfiction on disk so a work that is hidden or deleted upstream is still findable.
 
