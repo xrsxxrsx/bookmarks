@@ -1,0 +1,1432 @@
+/*
+ * Two palettes, switched by `data-theme` on the root element. Light is the default.
+ *
+ * The accent is the requested #0000ff, and it is used **literally** in the light theme: on a
+ * white surface it measures 8.59:1, so it reads as the vivid blue it is meant to be. On the dark
+ * surface the same value drops to 2.20:1 — below even the 3.0 threshold for non-text UI —
+ * because pure blue is the darkest primary and the eye is least sensitive to it. The dark theme
+ * therefore uses the same hue lifted in lightness. `scripts/pick-palette.mjs` prints the figures.
+ */
+:root,
+:root[data-theme='light'] {
+  --bg: #ffffff;
+  --panel: #f4f6fb;
+  --panel-2: #ffffff;
+  --line: #d8dfef;
+
+  --text: #12172b;
+  --muted: #5b6584;
+
+  --accent: #0000ff;
+  --accent-bright: #0000cc;
+  --accent-dim: #b3b3ff;
+  --accent-wash: #ececff;
+  --on-accent: #ffffff;
+
+  --ok: #0f7a3d;
+  --ok-bg: #e6f6ec;
+  --ok-line: #a8d9bd;
+
+  --warn: #a35a12;
+  --warn-bg: #fdf1e3;
+  --warn-line: #e6c9a3;
+
+  --err: #b3261e;
+  --err-bg: #fdecea;
+  --err-line: #f0b8b3;
+
+  --info-bg: #ececff;
+
+  --selected: #dfe4ff;
+  --shadow: rgb(18 23 43 / 18%);
+
+  --radius: 6px;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0b1020;
+  --panel: #111832;
+  --panel-2: #182142;
+  --line: #26315a;
+
+  --text: #e8ecf8;
+  --muted: #9aa6c4;
+
+  --accent: #6b7cff;
+  --accent-bright: #8fa0ff;
+  --accent-dim: #2a3a8f;
+  --accent-wash: #1a2352;
+  --on-accent: #0b1020;
+
+  --ok: #5ac8e8;
+  --ok-bg: #123244;
+  --ok-line: #1f5876;
+
+  --warn: #e8a05a;
+  --warn-bg: #35281a;
+  --warn-line: #6b4a26;
+
+  --err: #ff7b7b;
+  --err-bg: #3a1f27;
+  --err-line: #6b3340;
+
+  --info-bg: #1b2547;
+
+  --selected: #1e2a52;
+  --shadow: rgb(0 0 0 / 55%);
+
+  --radius: 6px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 9px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+button.small {
+  padding: 3px 7px;
+  font-size: 0.86rem;
+}
+
+button.full {
+  width: 100%;
+  margin-top: 4px;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent-dim);
+  outline-offset: 1px;
+}
+
+a.link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a.link:hover {
+  text-decoration: underline;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.pad {
+  padding: 8px;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/*
+ * The header sits above the table, and that needs saying explicitly.
+ *
+ * The table's header cells are `position: sticky` with `z-index: 5`. Sticky positioning creates a
+ * stacking context, and a dropdown panel's own `z-index: 20` is only compared *within* its
+ * ancestor's context — so the panel was painted underneath the sticky cells and the click landed on
+ * the table. `position: relative` on the bar plus a higher `z-index` lifts the whole bar, including
+ * its panels, above the table.
+ *
+ * `overflow: clip` rather than `hidden`: it removes the scrollbar a header should never have while
+ * leaving descendants free to overflow, which `hidden` would cut off.
+ */
+.topbar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  overflow: clip;
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------------------------------------------------------------- filter bar */
+
+/*
+ * A single row, and nothing may clip it.
+ *
+ * This bar previously used `overflow-x: auto` with `flex-wrap: nowrap` to stop the toolbar
+ * jumping to two rows when a filter badge appeared. That clipped on **both** axes — an
+ * absolutely positioned dropdown opens *below* the bar, so every dropdown panel was rendered
+ * outside the clip rectangle and was completely invisible. The buttons still responded; there
+ * was simply nothing to see.
+ *
+ * So no overflow here, and no nowrap. The search box is what gives up space, and if a window is
+ * genuinely too narrow the bar wraps — a toolbar on two rows is a cosmetic annoyance, whereas a
+ * filter panel the user cannot see is a broken feature.
+ */
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.filterbar .search {
+  flex: 1 1 10rem;
+  min-width: 6rem;
+}
+
+.sortgroup {
+  display: flex;
+  gap: 4px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.93rem;
+}
+
+.checkbox input {
+  padding: 0;
+}
+
+.fontscale {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.fontscale .muted {
+  font-size: 0.86rem;
+  margin-right: 2px;
+}
+
+.fontscale button {
+  padding: 4px 7px;
+}
+
+.fontscale button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown .caret {
+  font-size: 0.71rem;
+  margin-left: 2px;
+}
+
+.dropdown .active {
+  border-color: var(--accent-dim);
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
+/*
+ * The panel is a CSS popover, so it renders in the browser's **top layer**.
+ *
+ * Two earlier attempts failed for the same underlying reason: a panel opened from the toolbar is
+ * positioned *below* the bar, and any ancestor clipping cuts it off — `overflow-x: auto` on the
+ * filter bar clipped it, then `overflow: clip` on the header did the same, and lowering the sticky
+ * header's z-index did not help because the panel's hittable area was gone, not merely covered. The
+ * top layer is the browser's own answer to this: it is painted above everything and exempt from
+ * ancestor overflow, with no z-index management.
+ *
+ * `position: fixed` plus `inset: auto` lets the component place it from the trigger's rectangle;
+ * the popover supplies `display: none` until opened. The UA's own margins and border are reset.
+ */
+.dropdown-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 0;
+  min-width: 15rem;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.dropdown-panel:not(:popover-open) {
+  display: none;
+}
+
+.dropdown-list {
+  padding: 4px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: var(--panel);
+}
+
+.dropdown-item .count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- table */
+
+/*
+ * The table scrolls vertically but not horizontally.
+ *
+ * With a fixed layout and percentage columns, the table's width resolves against the wrapper's
+ * *content* box, so the wrapper's own vertical scrollbar makes the table a few pixels wider than
+ * the visible area — enough to raise a pointless horizontal scrollbar. Nothing needs to be reached
+ * horizontally, so it is hidden rather than left as noise.
+ */
+.table-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/*
+ * `table-layout: fixed` so the columns do not move when their content changes.
+ *
+ * With the default (`auto`) the browser re-measures every column on each render, so filtering by a
+ * tag — which changes which tags a row shows — visibly shifted the title and tag columns. The
+ * widths are declared below instead, which makes the layout a property of the interface rather
+ * than of whatever happens to be in the table.
+ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/*
+ * The sticky header needs a stacking order of its own to stay above its rows while scrolling, but
+ * a *low* one: a dropdown panel opened from the toolbar has `z-index: 20`, and the panel's own
+ * stacking context is the root, so the two are compared directly. At `z-index: 5` the header was
+ * painted over the panels; below the panel it does its job and stays out of the way.
+ */
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.th-label {
+  display: inline-block;
+}
+
+/* A grab strip on the header edge, widened past the visible line so it is easy to hit.
+   `touch-action: none` keeps the pointer sequence from turning into a scroll. */
+.col-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 6;
+  touch-action: none;
+}
+
+.col-resize::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  left: 4px;
+  width: 1px;
+  height: 60%;
+  background: var(--line);
+}
+
+.col-resize:hover::after,
+.col-resize:active::after {
+  background: var(--accent);
+  width: 2px;
+  top: 0;
+  height: 100%;
+}
+
+.reset-columns {
+  position: absolute;
+  top: 4px;
+  right: 14px;
+  z-index: 8;
+}
+
+tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+table.busy {
+  opacity: 0.6;
+}
+
+.work-row {
+  cursor: pointer;
+}
+
+.work-row:hover {
+  background: var(--panel);
+}
+
+.work-row.selected {
+  background: var(--selected);
+}
+
+/*
+ * A nested row is indicated by the `└` marker alone. It deliberately does **not** also get
+ * extra left padding: indenting twice pushed a related work's title 16px right of every
+ * other title, which is exactly the misalignment the marker slots exist to prevent.
+ */
+.work-row.nested .branch {
+  color: var(--accent);
+}
+
+.work-row.record-only .title-text {
+  color: var(--muted);
+}
+
+.branch {
+  color: var(--muted);
+}
+
+.branch-root {
+  color: var(--accent);
+}
+
+/* Declared widths, because the table is `fixed`. Percentages for the two elastic columns, fixed
+   sizes for the narrow facts, so the layout survives any content. */
+.col-title {
+  width: auto;
+}
+
+.col-author {
+  width: 13%;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.col-lang {
+  width: 3.2rem;
+  text-align: center;
+}
+
+/* The status column is a dot, not a word: it is the one fact worth seeing at a glance for every
+   row, and a badge per row was noisy. The meaning lives in the tooltip and in the colour. */
+.col-status {
+  width: 1.8rem;
+  text-align: center;
+  padding-left: 8px;
+  padding-right: 2px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.status-dot.on {
+  background: var(--accent);
+}
+
+.status-dot.off {
+  background: transparent;
+  border: 1.5px solid var(--muted);
+}
+
+.col-words,
+.col-date {
+  width: 6rem;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-date {
+  width: 6.6rem;
+}
+
+/*
+ * Tags wrap inside the column instead of running out of it.
+ *
+ * With a fixed table layout the column width is not negotiable, so tags that cannot wrap push the
+ * row's content past the table edge — the wrapper measured 1320px of content in a 940px box, and a
+ * hidden horizontal scrollbar was the only thing keeping it invisible. Wrapping keeps every tag
+ * inside the column; the row grows taller, which is the honest trade for a list of tags.
+ */
+.col-tags {
+  width: 22%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.col-tags .chip {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* ---------------------------------------------------------------- title alignment */
+
+.title-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/*
+ * Two reserved slots to the left of every title: the tree marker and the translation badge.
+ * Both keep their space whether or not a row has one, so every title starts at the same x.
+ *
+ * `flex: 0 0 <width>` alone is not enough. A flex item defaults to `min-width: auto`, so a
+ * wide badge would stretch its slot and push that row's title out of line — which is exactly
+ * what happened with a single shared slot. Hence `min-width: 0` plus clipping, so the width
+ * is genuinely fixed.
+ */
+.tree-slot,
+.badge-slot {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.tree-slot {
+  width: 1.1rem;
+  justify-content: flex-start;
+}
+
+.badge-slot {
+  width: 1.8rem;
+  justify-content: flex-start;
+}
+
+.title-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.title-flags {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.lang-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.79rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.chip {
+  display: inline-block;
+  margin: 1px 3px 1px 0;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.79rem;
+  line-height: 1.6;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chip.tag {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.chip.ao3 {
+  color: var(--text);
+}
+
+.chip.translation {
+  background: var(--accent-wash);
+  border-color: var(--accent-dim);
+  color: var(--accent-bright);
+}
+
+.chip.ok {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  color: var(--ok);
+}
+
+.chip.warn {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+  color: var(--warn);
+}
+
+.chip.muted-chip {
+  color: var(--muted);
+}
+
+.chip.subtle {
+  opacity: 0.8;
+}
+
+.chip.removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 2px;
+}
+
+/* Tags in a row are buttons so they can filter; they must still look like chips. */
+.chip.clickable {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.79rem;
+  line-height: 1.6;
+}
+
+.chip.clickable:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.chip.clickable.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.chip-remove {
+  border: none;
+  background: transparent;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1;
+}
+
+.chip-remove:hover {
+  color: var(--err);
+  background: transparent;
+  border: none;
+}
+
+mark {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.empty {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- detail panel */
+
+.detail {
+  /* Wide enough for three columns of metadata fields without the dates feeling cramped. */
+  flex: 0 0 30rem;
+  max-width: 30rem;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 12px 14px 24px;
+}
+
+.empty-detail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.detail-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.detail-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 7px;
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.file-list,
+.related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.file-list li.missing {
+  opacity: 0.75;
+}
+
+.file-format {
+  flex: 0 0 auto;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+}
+
+.related-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.link-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-align: left;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+  background: transparent;
+  border: none;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+/* ---------------------------------------------------------------- form */
+
+.field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.field > span {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  resize: vertical;
+}
+
+.title-field {
+  margin-bottom: 12px;
+}
+
+.title-input {
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 6px 9px;
+}
+
+/*
+ * Three columns of small fields, the way a reference manager lays out an item's metadata.
+ * Three rather than two because most of these values are short — a status, a language, a
+ * date. Only the author needs a whole row, which `.span-all` gives it.
+ */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 10px;
+}
+
+.field-grid .field {
+  min-width: 0;
+}
+
+.span-all {
+  grid-column: 1 / -1;
+}
+
+/* The label and its optional "约" toggle share one line, so the toggle cannot wrap onto a
+   line of its own the way it did when it sat beside the date input. */
+.field-label-row {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.approx-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.79rem;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.approx-toggle input {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
+.readonly-field .readonly-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  min-height: 2rem;
+}
+
+.inline-error {
+  margin: -4px 0 10px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  background: var(--err-bg);
+  color: var(--err);
+  font-size: 0.86rem;
+}
+
+.tag-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.tag-input {
+  flex: 1 1 6rem;
+  min-width: 6rem;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+}
+
+.tag-input:focus {
+  outline: none;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ---------------------------------------------------------------- import dialog extras */
+
+/* The per-work merge control: the manual route to joining files the rules keep apart. */
+.import-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 5px 14px;
+  font-size: 0.86rem;
+}
+
+.import-target select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 32rem;
+}
+
+.import-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.93rem;
+}
+
+.import-option .checkbox {
+  color: var(--text);
+}
+
+.chip.series {
+  background: var(--accent-wash);
+  border-color: var(--accent-dim);
+  color: var(--accent-bright);
+}
+
+/*
+ * Series membership rows: name, optional position, how many works share it.
+ *
+ * Every child of a row must be allowed to shrink. Without `min-width: 0` a nested input refuses
+ * to go below its intrinsic width and spills outside the box, which is exactly what happened —
+ * the row became a second box extending past its parent.
+ */
+.series-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.series-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.series-row > * {
+  min-width: 0;
+}
+
+.series-row .chip.series {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-row .muted,
+.series-row .chip-remove {
+  flex: 0 0 auto;
+}
+
+.series-position {
+  flex: 0 0 3rem;
+  width: 3rem;
+  text-align: center;
+  padding: 3px 4px;
+}
+
+/* The editor's own input spans the box rather than overflowing it. */
+.series-editor > .tag-input {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 4px 6px;
+}
+
+/* Compact input for values that are one or two characters: a language code, a count. */
+.short-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+/* Deleting a work is irreversible from inside the application, so it sits at the bottom and
+   states exactly what will go. */
+.danger-zone {
+  border-top: 1px solid var(--err-line);
+}
+
+.delete-confirm p {
+  margin: 0 0 8px;
+  line-height: 1.7;
+}
+
+.delete-actions {
+  display: flex;
+  gap: 8px;
+}
+
+button.danger {
+  background: var(--err-bg);
+  border-color: var(--err);
+  color: var(--err);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--err);
+  border-color: var(--err);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------- settings panel */
+
+.settings-body {
+  overflow-y: auto;
+  margin: 6px 0 10px;
+  flex: 1 1 auto;
+}
+
+.settings-section {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.settings-row > span:first-child {
+  flex: 0 0 10rem;
+  padding-top: 5px;
+  font-size: 0.93rem;
+}
+
+.settings-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-control select {
+  min-width: 12rem;
+}
+
+.path-value {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.settings-hint {
+  font-size: 0.86rem;
+  line-height: 1.7;
+  padding-top: 4px;
+}
+
+.settings-hint code {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.settings-notice {
+  margin-bottom: 10px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 0.86rem;
+}
+
+/*
+ * The dismissed-suggestions list is capped and scrolls on its own. It grows over time with no
+ * natural bound, and an unbounded list would push the rest of the settings — including the library
+ * location — off the panel.
+ */
+.settings-list {
+  max-height: 11rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  background: var(--panel-2);
+}
+
+.settings-list .settings-row {
+  padding: 3px 0;
+}
+
+.settings-list .settings-row > span:first-child {
+  flex: 0 0 7rem;
+}
+
+/* First-run and broken-library screens. */
+.setup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.fatal code {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- banners and status */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  font-size: 0.93rem;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.banner.error {
+  background: var(--err-bg);
+  color: var(--err);
+}
+
+.banner.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.banner.info {
+  background: var(--info-bg);
+  color: var(--text);
+}
+
+.banner span {
+  flex: 1 1 auto;
+}
+
+/*
+ * The bar itself never scrolls, but its dropdown panels must still be able to overflow it: `clip`
+ * removes the scrollbar without clipping descendants, which `hidden` would do.
+ */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.86rem;
+  flex: 0 0 auto;
+  overflow: clip;
+  flex-wrap: nowrap;
+}
+
+.statusbar .stat {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.statusbar b {
+  color: var(--text);
+}
+
+.statusbar .sep {
+  opacity: 0.5;
+  flex: 0 0 auto;
+}
+
+.statusbar .spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The path is the one elastic item: it truncates rather than pushing the bar into a scroll. */
+.statusbar .path {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+/* ---------------------------------------------------------------- modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  width: 29rem;
+  max-width: 92vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px var(--shadow);
+}
+
+.modal.wide {
+  width: 46rem;
+}
+
+.modal h2 {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+}
+
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.93rem;
+}
+
+.import-summary .sep {
+  opacity: 0.5;
+}
+
+.import-body {
+  overflow-y: auto;
+  margin: 10px 0;
+  flex: 1 1 auto;
+}
+
+.import-work {
+  margin-bottom: 12px;
+}
+
+.import-work-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 3px;
+}
+
+.import-title {
+  font-weight: 600;
+}
+
+.import-files {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+}
+
+.import-files li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+  font-size: 0.86rem;
+}
+
+.import-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.import-relations {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  font-size: 0.86rem;
+  margin-bottom: 10px;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------------------------------------------------------- states */
+
+.loading,
+.fatal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.fatal h1 {
+  color: var(--err);
+  font-size: 1.29rem;
+}
+
+.fatal pre {
+  max-width: 46rem;
+  white-space: pre-wrap;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  color: var(--text);
+}

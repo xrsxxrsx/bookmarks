@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/app"]
+
+# Only `core` is a default member so `cargo test` runs the fast, dependency-light suite.
+# The app crate becomes a default member once the Tauri frontend lands and its build
+# actually needs to run on every change.
+default-members = ["crates/core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+scraper = "0.21"
+unicode-normalization = "0.1"
+encoding_rs = "0.8"
+sha2 = "0.10"
+thiserror = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[profile.release]
+# Shipped as a Windows .exe, so trade build time for a smaller binary.
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

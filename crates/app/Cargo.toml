@@ -1,0 +1,30 @@
+[package]
+name = "bookmarks-app"
+description = "Desktop shell for the local fanfiction library."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# Tauri's convention: the app is a library plus a thin binary, so the same code can be
+# exercised by tests without starting a window. `staticlib`/`cdylib` are only needed for
+# mobile targets, which this project does not build, and producing them on Windows emits
+# a noisy .dll.lib/.dll.exp link step for no benefit.
+name = "bookmarks_app_lib"
+crate-type = ["rlib"]
+
+# The Tauri dependencies are large, which is why `cargo test` runs only `crates/core` by
+# default (see the workspace `default-members`). Build this crate with
+# `cargo build --workspace` or `--package bookmarks-app`.
+[dependencies]
+bookmarks-core = { path = "../core" }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

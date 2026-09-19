@@ -1,0 +1,26 @@
+# Rust build artefacts
+/target/
+
+# Bootstrapping tools downloaded into the repo (rustup-init.exe and the scratch crate
+# used to prove cargo could reach crates.io). Reproducible via scripts/fetch-rustup.mjs,
+# so they are not tracked.
+/.tools/
+
+# Node / frontend
+node_modules/
+/dist/
+
+# Machine-specific cargo registry override for the local TLS bridge. Points at
+# 127.0.0.1:23456, which no other machine is running; see scripts/net-bridge.mjs.
+/.cargo/config.toml
+
+# The real AO3 downloads used by the acceptance tests are deliberately absent: they are
+# other people's stories and must not be republished. Drop them in the root to run those
+# tests; see "What is verified" in the README. They sit under D:\dsh\books in practice,
+# but are listed here so a stray copy can never be committed by accident.
+/*.html
+/*.epub
+/*.pdf
+/*.txt
+!/index.html
+

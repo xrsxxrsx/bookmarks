@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Permissions the library window needs: showing the file picker, and handing a stored file to the system's default application.","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","opener:allow-open-path","opener:allow-reveal-item-in-dir"]}}

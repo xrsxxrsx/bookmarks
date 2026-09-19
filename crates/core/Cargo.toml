@@ -1,0 +1,19 @@
+[package]
+name = "bookmarks-core"
+description = "Domain logic for the local fanfiction library: formats, AO3 parsing, normalization, storage."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+scraper = { workspace = true }
+unicode-normalization = { workspace = true }
+encoding_rs = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+rusqlite = { workspace = true }
+
+[dev-dependencies]
